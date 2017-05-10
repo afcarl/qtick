@@ -22,6 +22,7 @@ class state(object):
             self.steps.popleft()
 
         self.steps.append(step_array)
+        self.complete()
 
     def complete(self):
         self.value = np.concatenate(self.steps)

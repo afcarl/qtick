@@ -43,8 +43,10 @@ class qlearn(object):
         self.actions = actions
         self.history = history.history(self.history_size)
 
-        output_path += '/run.%d' % (time.time())
-        self.summary_writer = tf.summary.FileWriter(output_path)
+        self.summary_writer = None
+        if output_path:
+            output_path += '/run.%d' % (time.time())
+            self.summary_writer = tf.summary.FileWriter(output_path)
 
         self.main = nn.nn("main", state_shape[0], actions, self.summary_writer)
         #self.follower = nn.nn("follower", state_shape[0], actions, self.summary_writer)

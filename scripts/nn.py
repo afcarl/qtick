@@ -196,9 +196,10 @@ class nn(object):
                 self.scope + '/y:0': qvals,
             })
         summary = ret[0]
-        self.summary_writer.add_summary(summary, self.train_num)
-        summary_weights = ret[1]
-        self.summary_writer.add_summary(summary_weights, self.train_num)
+        if self.summary_writer:
+            self.summary_writer.add_summary(summary, self.train_num)
+            summary_weights = ret[1]
+            self.summary_writer.add_summary(summary_weights, self.train_num)
 
         dret = {}
         if want_grads:
@@ -216,7 +217,8 @@ class nn(object):
                 self.scope + '/x:0': states,
                 self.scope + '/y:0': qvals,
             })
-        self.summary_writer.add_summary(summary, self.train_num)
+        if self.summary_writer:
+            self.summary_writer.add_summary(summary, self.train_num)
 
         dret = {}
         for k, v in zip(self.gradient_names, grads):

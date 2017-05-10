@@ -118,6 +118,9 @@ class qtick(object):
 
         return a
 
+    def get_last_price(self, s):
+        return s.read()[-self.observation_shape]
+
     def train(self, currency_path, index_path, equity_path, sep=';'):
         cdf = self.read_csv(currency_path, sep=sep)
         idf = self.read_csv(index_path, sep=sep)
@@ -135,13 +138,9 @@ class qtick(object):
 
         e = episodes(df, self.action_num)
 
-        total_equity = 0.
-        total_money = 0.
-
         num = 1000
         equity = 0
         money = self.MONEY
-
 
         while True:
             obs = e.reset()
@@ -153,9 +152,10 @@ class qtick(object):
             s = self.new_state(obs)
             actions = {}
             while True:
-                price = s.value[0] * num
-                comission_price = price * (1. + self.COMISSION)
-                equity_price = s.value[0] * equity
+                price = self.get_last_price(s)
+                cost = price * num
+                comission_price = cost * (1. + self.COMISSION)
+                equity_price = price * equity
 
                 a = self.get_action_limit(s, comission_price, equity_price, money)
 
@@ -173,7 +173,7 @@ class qtick(object):
                 obs, r, done, _ = e.step(a)
                 sn = self.new_state(obs)
                 
-                new_equity_price = obs[0] * equity
+                new_equity_price = self.get_last_price(sn) * equity
                 reward = money + new_equity_price - prev
 
                 au = actions.get(a, 0)
@@ -193,9 +193,6 @@ class qtick(object):
                 if done:
                     break
 
-                total_money += money
-                total_equity += equity
-
             print "Episode completed: money: %.2f, equity: %d, total: %.2f, actions: %s" % (
                     money, equity, money + equity*s.value[0], actions)
 
@@ -205,7 +202,7 @@ if __name__ == '__main__':
     parser.add_argument('--equity', action='store', required=True)
     parser.add_argument('--currency', required=True)
     parser.add_argument('--index', required=True)
-    parser.add_argument('--tf_output_path', required=True)
+    parser.add_argument('--tf_output_path')
     parser.add_argument('--observation_num', action=utils.store_long, default=1)
     parser.add_argument('--checkpoint')
 

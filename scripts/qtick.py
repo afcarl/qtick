@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 
 import argparse
+import os
 
 import qlearn
 import state
@@ -56,6 +57,17 @@ class episodes(object):
 
         return obs, reward, done, None
 
+    def current_time(self):
+        index = self.index
+        if self.index > len(self.df) - 1:
+            index = -1
+
+        return self.df.index[index]
+
+    def current_date_str(self):
+        d = self.current_time()
+        return "%02d.%02d.%d" % (d.day, d.month, d.year)
+
 class qtick(object):
     ACTION_BUY = 0
     ACTION_HOLD = 1
@@ -67,6 +79,7 @@ class qtick(object):
 
     def __init__(self, output_path, observation_num=1, checkpoint_path=None):
         self.observation_num = observation_num
+        self.checkpoint_path = checkpoint_path
 
         # equity, currency, index prices normalized by the first value
         self.observation_shape = 1 + 1 + 1
@@ -77,6 +90,11 @@ class qtick(object):
         self.current_state = state.state(self.observation_shape, self.observation_num)
 
         self.q = qlearn.qlearn((self.observation_shape*self.observation_num,), self.action_num, output_path)
+
+    def save(self):
+        self.q.save(self.checkpoint_path)
+    def load(self, path):
+        self.q.load(path)
 
     def new_state(self, obs):
         self.current_state.push_array(obs)
@@ -138,16 +156,28 @@ class qtick(object):
 
         e = episodes(df, self.action_num)
 
+        num_episodes = 0
+
         num = 1000
         equity = 0
         money = self.MONEY
 
+        episode_set_start = None
+        episode_set_end = None
+
         while True:
             obs = e.reset()
             if obs.size == 0:
+                episode_set_end = e.current_date_str()
+                print "Saving and starting over, episodes: %d, period: %s-%s" % (num_episodes, episode_set_start, episode_set_end)
+                self.save()
+
                 e.start_over()
-                print "Starting over"
                 continue
+
+            episode_start = e.current_date_str()
+            if not episode_set_start:
+                episode_set_start = episode_start
 
             s = self.new_state(obs)
             actions = {}
@@ -167,6 +197,8 @@ class qtick(object):
                 if a == self.ACTION_SELL:
                     money += (1. - self.COMISSION) * equity_price
                     equity = 0
+                    #money += (1. - self.COMISSION) * cost
+                    #equity -= num
                 if a == self.ACTION_HOLD:
                     pass
 
@@ -193,8 +225,11 @@ class qtick(object):
                 if done:
                     break
 
-            print "Episode completed: money: %.2f, equity: %d, total: %.2f, actions: %s" % (
-                    money, equity, money + equity*s.value[0], actions)
+            episode_end = e.current_date_str()
+
+            print "Episode %d %s-%s completed: portfolio: %.2f, money: %.2f, equity: %d, actions: %s" % (
+                    num_episodes, episode_start, episode_end, money + equity * self.get_last_price(s), money, equity, actions)
+            num_episodes += 1
 
 
 if __name__ == '__main__':
@@ -208,6 +243,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    q = qtick(args.tf_output_path, args.observation_num, checkpoint_path=args.checkpoint)
+    q = qtick(args.tf_output_path, args.observation_num, args.checkpoint)
+    if args.checkpoint and os.path.isfile(args.checkpoint):
+        q.load(args.checkpoint)
+
 
     q.train(args.currency, args.index, args.equity)

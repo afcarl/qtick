@@ -28,7 +28,7 @@ class action(object):
         return str(self.action)
 
 class qlearn(object):
-    def __init__(self, state_shape, actions, output_path, checkpoint_path=None):
+    def __init__(self, state_shape, actions, output_path):
         self.alpha = 1
         self.gamma = 0.99
         self.random_action_alpha = 1
@@ -51,8 +51,8 @@ class qlearn(object):
         self.main = nn.nn("main", state_shape[0], actions, self.summary_writer)
         #self.follower = nn.nn("follower", state_shape[0], actions, self.summary_writer)
 
-        if checkpoint_path:
-            self.main.load(checkpoint_path)
+    def load(self, path):
+        self.main.load(path)
 
     def save(self, path):
         self.main.save(path)

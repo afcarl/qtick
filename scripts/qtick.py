@@ -10,11 +10,31 @@ import state
 import utils
 
 class episodes(object):
-    def __init__(self, df, action_num):
+    def __init__(self, currency_path, index_path, equity_path, sep=';'):
+        cdf = self.read_csv(currency_path, sep=sep)
+        idf = self.read_csv(index_path, sep=sep)
+        edf = self.read_csv(equity_path, sep=sep)
+
+        df = pd.DataFrame(index=edf.index)
+        df.ix[:, 'Equity'] = edf.ix[:, 'Close']
+        df.ix[:, 'Currency'] = cdf.ix[:, 'Close']
+        df.ix[:, 'Index'] = idf.ix[:, 'Close']
+
+        df = df.fillna(method='ffill')
+        df = df.fillna(method='bfill')
+        df = df.fillna(1.0)
+        df /= df.iloc[0, :]
+
         self.df = df
         self.index = 0
-        self.action_num = action_num
         self.prev_date = df.index[0]
+
+    def read_csv(self, path, sep=';'):
+        dtypes = {'Date': str, 'Time': str}
+        df = pd.read_csv(path, sep=sep, header=0, names=['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume'], dtype=dtypes)
+        dtime = df.Date + ' ' + df.Time
+        df.index = pd.to_datetime(dtime)
+        return df
 
     def start_over(self):
         self.index = 0
@@ -29,11 +49,7 @@ class episodes(object):
         self.index += 1
         return obs
 
-    def step(self, action):
-        if action < 0 or action >= self.action_num:
-            print "invalid action: %d, must be in [0, %d)" % (action, self.action_num)
-            exit(-1)
-
+    def next(self):
         if self.index == len(self.df):
             print "episode has been completed"
             exit(-1)
@@ -101,13 +117,6 @@ class qtick(object):
         self.current_state.complete()
         return deepcopy(self.current_state)
 
-    def read_csv(self, path, sep=';'):
-        dtypes = {'Date': str, 'Time': str}
-        df = pd.read_csv(path, sep=sep, header=0, names=['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume'], dtype=dtypes)
-        dtime = df.Date + ' ' + df.Time
-        df.index = pd.to_datetime(dtime)
-        return df
-
     def run_episode(self):
         print "%s-%s: %d" % (self.current_df.index[0], self.current_df.index[-1], len(self.current_df))
 
@@ -139,23 +148,7 @@ class qtick(object):
     def get_last_price(self, s):
         return s.read()[-self.observation_shape]
 
-    def train(self, currency_path, index_path, equity_path, sep=';'):
-        cdf = self.read_csv(currency_path, sep=sep)
-        idf = self.read_csv(index_path, sep=sep)
-        edf = self.read_csv(equity_path, sep=sep)
-
-        df = pd.DataFrame(index=edf.index)
-        df.ix[:, 'Equity'] = edf.ix[:, 'Close']
-        df.ix[:, 'Currency'] = cdf.ix[:, 'Close']
-        df.ix[:, 'Index'] = idf.ix[:, 'Close']
-
-        df = df.fillna(method='ffill')
-        df = df.fillna(method='bfill')
-        df = df.fillna(1.0)
-        df /= df.iloc[0, :]
-
-        e = episodes(df, self.action_num)
-
+    def run(self, e, want_train):
         num_episodes = 0
 
         num = 1000
@@ -169,6 +162,9 @@ class qtick(object):
             obs = e.reset()
             if obs.size == 0:
                 episode_set_end = e.current_date_str()
+                if not want_train:
+                    break
+
                 print "Saving and starting over, episodes: %d, period: %s-%s" % (num_episodes, episode_set_start, episode_set_end)
                 self.save()
 
@@ -202,7 +198,7 @@ class qtick(object):
                 if a == self.ACTION_HOLD:
                     pass
 
-                obs, r, done, _ = e.step(a)
+                obs, r, done, _ = e.next()
                 sn = self.new_state(obs)
                 
                 new_equity_price = self.get_last_price(sn) * equity
@@ -217,8 +213,9 @@ class qtick(object):
                     #    s, obs, self.a2s(a), equity, new_equity_price, money, prev, new_equity_price + money, reward)
                     pass
 
-                self.q.history.append((s, a, reward, sn, done), 1)
-                self.q.learn()
+                if want_train:
+                    self.q.history.append((s, a, reward, sn, done), 1)
+                    self.q.learn()
 
                 s = sn
 
@@ -240,6 +237,7 @@ if __name__ == '__main__':
     parser.add_argument('--tf_output_path')
     parser.add_argument('--observation_num', action=utils.store_long, default=1)
     parser.add_argument('--checkpoint')
+    parser.add_argument('--test', action='store_true', default=False)
 
     args = parser.parse_args()
 
@@ -247,5 +245,6 @@ if __name__ == '__main__':
     if args.checkpoint and os.path.isfile(args.checkpoint):
         q.load(args.checkpoint)
 
+    e = episodes(args.currency, args.index, args.equity)
+    q.run(e, not args.test)
 
-    q.train(args.currency, args.index, args.equity)

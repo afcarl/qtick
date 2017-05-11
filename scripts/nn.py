@@ -52,7 +52,7 @@ class nn(object):
         return w, b
 
     def init_model(self, input_size, output_size):
-        layers = [50, 190, output_size]
+        layers = [150, 600, 64, output_size]
         #layers = [256, output_size]
 
         print "init_model scope: %s" % (tf.get_variable_scope().name)
@@ -273,5 +273,5 @@ class nn(object):
 
     def save(self, path):
         self.saver.save(self.sess, path)
-    def restore(self, path):
+    def load(self, path):
         self.saver.restore(self.sess, path)
